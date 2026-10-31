@@ -1,155 +1,353 @@
 package martin_svk.whatisplaying
+
+import android.app.Notification
+import android.content.ComponentName
+import android.content.Context
+import android.content.SharedPreferences
+import android.media.AudioManager
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import kotlin.concurrent.thread
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.concurrent.Executors
 
-class WhatIsPlaying : NotificationListenerService(){
+class WhatIsPlaying : NotificationListenerService() {
 
-    private var lastTrack = ""
-    private val discordToken = "pasteHereYourDiscordToken"
+    companion object {
+        private const val TAG = "MusicApp"
+        private const val MAX_STATUS_LENGTH = 128
+        private const val PLAYBACK_CHECK_INTERVAL_MS = 5_000L
+
+        private val MUSIC_PACKAGES = setOf("com.metrolist.music", "deezer.android.app")
+
+        private val KAOMOJIS = listOf(
+            "(=^•ω•^=)",
+            "(=^･ω･^=)",
+            "(=ↀωↀ=)",
+            "(=^ ◡ ^=)",
+            "(^・ω・^ )",
+            "(｡•̀ᴗ-)✧",
+            "(๑>ᴗ<๑)",
+            "(≧◡≦)",
+            "(づ｡◕‿‿◕｡)づ",
+            "(´｡• ᵕ •｡`)",
+            "(˶ᵔ ᵕ ᵔ˶)",
+            "(｡･ω･｡)",
+            "(„• ᴗ •„)",
+            "(✿◠‿◠)",
+            "(⁄ ⁄•⁄ω⁄•⁄ ⁄)",
+            "(๑•́ ₃ •̀๑)",
+            "(≧ω≦)",
+            "(＾▽＾)",
+            "(⌒‿⌒)",
+            "(๑˃ᴗ˂)ﻭ",
+            "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+            "(｡>﹏<｡)",
+            "(´･ω･`)",
+            "(・∀・)",
+            "(◕ᴗ◕✿)",
+            "(ᵔᴥᵔ)",
+            "(ฅ^•ﻌ•^ฅ)",
+            "(｡•ω•｡)",
+            "(っ˘ω˘ς)",
+            "(๑´ω`๑)",
+            "(o^▽^o)",
+            "(✧ω✧)",
+            "(ﾉ´ヮ`)ﾉ*: ･ﾟ",
+            "( ˘ ³˘)♥",
+            "(๑•᎑•๑)"
+        )
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val networkExecutor = Executors.newSingleThreadExecutor()
+
+    private var lastTitle = ""
+    private var lastArtist = ""
+    private var lastTrackKey = ""
+    private var lastPackage = ""
+    private var lastSessionToken: MediaSession.Token? = null
+    private var statusShown = false
+
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key != AppPreferences.KEY_ENABLED) return@OnSharedPreferenceChangeListener
+
+        if (AppPreferences.isEnabled(this)) {
+            refreshFromActiveNotifications()
+        } else {
+            stopPlaybackWatcher()
+            forgetTrack()
+            clearDiscordStatus()
+        }
+    }
+
+    private val playbackWatcher = object : Runnable {
+        override fun run() {
+            checkPlaybackState()
+            if (lastTitle.isNotEmpty() && AppPreferences.isEnabled(this@WhatIsPlaying)) {
+                handler.postDelayed(this, PLAYBACK_CHECK_INTERVAL_MS)
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        AppPreferences.prefs(this).registerOnSharedPreferenceChangeListener(prefsListener)
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        if (AppPreferences.isEnabled(this)) {
+            refreshFromActiveNotifications()
+        }
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
+        if (sbn == null) return
+        if (sbn.packageName !in MUSIC_PACKAGES) return
 
-        if(sbn == null) return
-
-
-        if (sbn.packageName != "com.metrolist.music" && sbn.packageName != "deezer.android.app") return //the name of your music application, get from Logcat
-
-        val extras = sbn.notification.extras
-
-        val title = extras.getCharSequence("android.title")?.toString()
-        val artist = extras.getCharSequence("android.text")?.toString()
-
-        if (title == null || artist == null) {
+        if (!AppPreferences.isEnabled(this)) {
+            stopPlaybackWatcher()
+            forgetTrack()
             clearDiscordStatus()
             return
         }
 
-        if (title == "Prehrávač hudby" || title.contains("Metrolist", ignoreCase = true)) {
+        val sessionToken = mediaSessionToken(sbn)
+        if (sbn.notification.category != Notification.CATEGORY_TRANSPORT && sessionToken == null) {
             return
         }
 
-        var cleanedTitle = title.replace(Regex("\\(spolu s[^)]*\\)"), "").trim()
-        cleanedTitle = cleanedTitle.replace(Regex("\\(with[^)]*\\)"), "").trim()
+        val extras = sbn.notification.extras
+        val rawTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()
+        val rawArtist = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
 
-        val currentTrack = "$cleanedTitle - $artist"
-        if(currentTrack == lastTrack) return
-
-        lastTrack = currentTrack
-        Log.d("MusicApp", "send to DC: $currentTrack")
-
-        thread {
-            updateDiscordStatus(cleanedTitle, artist)
+        if (rawTitle.isNullOrBlank() || rawArtist.isNullOrBlank()) {
+            forgetTrack()
+            clearDiscordStatus()
+            return
         }
+
+        if (TrackInfoParser.isPlayerNotification(rawTitle)) {
+            return
+        }
+
+        val title = TrackInfoParser.cleanTitle(rawTitle).ifBlank { rawTitle }
+        val artist = TrackInfoParser.cleanArtist(rawArtist).ifBlank { rawArtist }
+        val trackKey = "$title - $artist"
+        val trackChanged = trackKey != lastTrackKey
+
+        lastTitle = title
+        lastArtist = artist
+        lastTrackKey = trackKey
+        lastPackage = sbn.packageName
+        lastSessionToken = sessionToken
+
+        if (isPlaybackPaused(sbn, sessionToken)) {
+            clearDiscordStatus()
+        } else if (!statusShown || trackChanged) {
+            sendStatus(title, artist)
+        }
+
+        startPlaybackWatcher()
     }
-
-
-
-
-    private fun updateDiscordStatus(title: String, artist: String) {
-        try{
-
-            val catEmoji = "(=^•ω•^=)"
-            var statusText = "$title | $artist $catEmoji"
-            if(statusText.length > 125)
-                statusText = statusText.substring(0,122) + "..."
-
-
-            val url = URL("https://discord.com/api/v9/users/@me/settings")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "PATCH"
-            connection.setRequestProperty("Authorization", discordToken)
-            connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8")
-            connection.setRequestProperty("Accept", "application/json")
-            connection.doOutput = true
-
-            val jsonBody = """
-                {
-                  "custom_status": {
-                    "text": ${escapeJsonString(statusText)},
-                    "emoji_name": "🌱"
-                  }
-                }
-            """.trimIndent()
-
-            val os = OutputStreamWriter(connection.outputStream, "UTF-8")
-            os.write(jsonBody)
-            os.flush()
-            os.close()
-
-            val responseCode = connection.responseCode
-            Log.d("MusicApp", "DC API response: $responseCode")
-
-            if (responseCode !in 200..299) {
-                val errorString = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                Log.e("MusicApp", "DC error message: $errorString")
-            }
-
-            connection.disconnect()
-        } catch (e: Exception) {
-            Log.e("MusicApp", "Error sending update: ${e.message}")
-        }
-        }
-    private fun clearDiscordStatus(){
-        lastTrack = ""
-
-        thread {
-            try {
-                val url = URL("https://discord.com/api/v9/users/@me/settings")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "PATCH"
-                connection.setRequestProperty("Authorization", discordToken)
-                connection.setRequestProperty("Content-Type", "application/json;charset=UTF-8")
-                connection.doOutput = true
-
-                val jsonBody = """
-                    {
-                      "custom_status": null
-                    }
-                """.trimIndent()
-
-                val os = OutputStreamWriter(connection.outputStream, "UTF-8")
-                os.write(jsonBody)
-                os.flush()
-                os.close()
-
-                Log.d("MusicApp", "DC API remove status code: ${connection.responseCode}")
-                connection.disconnect()
-            } catch (e: Exception) {
-                Log.e("MusicApp", "Delete status error: ${e.message}")
-            }
-        }
-    }
-
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        if (sbn?.packageName == "com.metrolist.music") {
-            Log.d("MusicApp", "No notification")
+        if (sbn != null && sbn.packageName in MUSIC_PACKAGES) {
+            Log.d(TAG, "Music notification removed")
+            stopPlaybackWatcher()
+            forgetTrack()
             clearDiscordStatus()
         }
     }
 
-    override fun onDestroy() {
-        Log.e("MusicApp", "Shutdown")
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        stopPlaybackWatcher()
+        forgetTrack()
         clearDiscordStatus()
+    }
+
+    override fun onDestroy() {
+        Log.d(TAG, "Shutdown")
+        handler.removeCallbacks(playbackWatcher)
+        AppPreferences.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
+        forgetTrack()
+        clearDiscordStatus()
+        networkExecutor.shutdown()
         super.onDestroy()
     }
 
-    private fun escapeJsonString(text: String): String {
-        val escaped = text
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        return "\"$escaped\""
+    private fun sendStatus(title: String, artist: String) {
+        val token = AppPreferences.getToken(this)
+        if (token.isBlank()) {
+            Log.w(TAG, "Discord token is not set")
+            return
+        }
+
+        val status = buildStatus(title, artist)
+        statusShown = true
+        Log.d(TAG, "send to DC: $status")
+
+        networkExecutor.execute {
+            DiscordApi.update(token, status)
+        }
     }
 
+    private fun clearDiscordStatus() {
+        if (!statusShown) return
+        statusShown = false
 
+        val token = AppPreferences.getToken(this)
+        if (token.isBlank()) {
+            Log.w(TAG, "Discord token is not set; cannot clear status")
+            return
+        }
+
+        networkExecutor.execute {
+            DiscordApi.clear(token)
+        }
+    }
+
+    private fun buildStatus(title: String, artist: String): String {
+        val kaomoji = KAOMOJIS.random()
+        val suffix = " $kaomoji"
+        val maxBodyLength = MAX_STATUS_LENGTH - suffix.codePointCount(0, suffix.length)
+
+        var body = "$title | $artist"
+        if (body.codePointCount(0, body.length) > maxBodyLength) {
+            body = truncateCodePoints(body, (maxBodyLength - 3).coerceAtLeast(0)) + "..."
+        }
+
+        return body + suffix
+    }
+
+    private fun truncateCodePoints(text: String, maxCodePoints: Int): String {
+        if (maxCodePoints <= 0) return ""
+        if (text.codePointCount(0, text.length) <= maxCodePoints) return text
+        return text.substring(0, text.offsetByCodePoints(0, maxCodePoints))
+    }
+
+    private fun checkPlaybackState() {
+        if (!AppPreferences.isEnabled(this)) {
+            stopPlaybackWatcher()
+            forgetTrack()
+            clearDiscordStatus()
+            return
+        }
+
+        if (lastTitle.isEmpty()) {
+            stopPlaybackWatcher()
+            return
+        }
+
+        val state = currentPlaybackState()
+        when {
+            isPausedState(state) -> clearDiscordStatus()
+            state != null && !statusShown -> sendStatus(lastTitle, lastArtist)
+        }
+    }
+
+    private fun currentPlaybackState(): Int? =
+        stateFromToken(lastSessionToken) ?: stateFromActiveSessions(lastPackage)
+
+    private fun isPlaybackPaused(
+        sbn: StatusBarNotification,
+        sessionToken: MediaSession.Token?
+    ): Boolean {
+        val state = stateFromToken(sessionToken) ?: stateFromActiveSessions(sbn.packageName)
+        if (state != null) return isPausedState(state)
+        return !isMusicActive()
+    }
+
+    private fun stateFromToken(token: MediaSession.Token?): Int? {
+        if (token == null) return null
+
+        return try {
+            val controller = MediaController(this, token)
+            controller.playbackState?.state
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaController from notification failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun stateFromActiveSessions(packageName: String): Int? {
+        if (packageName.isEmpty()) return null
+
+        return try {
+            val manager = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+            val component = ComponentName(this, WhatIsPlaying::class.java)
+            manager.getActiveSessions(component)
+                .firstOrNull { it.packageName == packageName }
+                ?.playbackState?.state
+        } catch (e: Exception) {
+            Log.w(TAG, "getActiveSessions failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun mediaSessionToken(sbn: StatusBarNotification): MediaSession.Token? {
+        val extras = sbn.notification.extras
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                extras.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                extras.getParcelable(Notification.EXTRA_MEDIA_SESSION)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Media session token unavailable: ${e.message}")
+            null
+        }
+    }
+
+    private fun isMusicActive(): Boolean {
+        return try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.isMusicActive
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun isPausedState(state: Int?): Boolean =
+        state == PlaybackState.STATE_PAUSED ||
+            state == PlaybackState.STATE_STOPPED ||
+            state == PlaybackState.STATE_NONE
+
+    private fun startPlaybackWatcher() {
+        handler.removeCallbacks(playbackWatcher)
+        handler.postDelayed(playbackWatcher, PLAYBACK_CHECK_INTERVAL_MS)
+    }
+
+    private fun stopPlaybackWatcher() {
+        handler.removeCallbacks(playbackWatcher)
+    }
+
+    private fun refreshFromActiveNotifications() {
+        if (!AppPreferences.isEnabled(this)) return
+
+        try {
+            activeNotifications?.forEach { onNotificationPosted(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Refreshing active notifications failed: ${e.message}")
+        }
+    }
+
+    private fun forgetTrack() {
+        lastTitle = ""
+        lastArtist = ""
+        lastTrackKey = ""
+        lastPackage = ""
+        lastSessionToken = null
+    }
 }
