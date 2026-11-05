@@ -24,8 +24,6 @@ class WhatIsPlaying : NotificationListenerService() {
         private const val MAX_STATUS_LENGTH = 128
         private const val PLAYBACK_CHECK_INTERVAL_MS = 5_000L
 
-        private val MUSIC_PACKAGES = setOf("com.metrolist.music", "deezer.android.app")
-
         private val KAOMOJIS = listOf(
             "(=^•ω•^=)",
             "(=^･ω･^=)",
@@ -76,14 +74,28 @@ class WhatIsPlaying : NotificationListenerService() {
     private var statusShown = false
 
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key != AppPreferences.KEY_ENABLED) return@OnSharedPreferenceChangeListener
+        when (key) {
+            AppPreferences.KEY_ENABLED -> {
+                if (AppPreferences.isEnabled(this)) {
+                    refreshFromActiveNotifications()
+                } else {
+                    stopPlaybackWatcher()
+                    forgetTrack()
+                    clearDiscordStatus()
+                }
+            }
 
-        if (AppPreferences.isEnabled(this)) {
-            refreshFromActiveNotifications()
-        } else {
-            stopPlaybackWatcher()
-            forgetTrack()
-            clearDiscordStatus()
+            AppPreferences.KEY_SELECTED_PACKAGES -> {
+                if (!AppPreferences.isEnabled(this)) return@OnSharedPreferenceChangeListener
+
+                if (lastPackage.isNotEmpty() && !isSelectedPackage(lastPackage)) {
+                    stopPlaybackWatcher()
+                    forgetTrack()
+                    clearDiscordStatus()
+                } else {
+                    refreshFromActiveNotifications()
+                }
+            }
         }
     }
 
@@ -111,7 +123,7 @@ class WhatIsPlaying : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
-        if (sbn.packageName !in MUSIC_PACKAGES) return
+        if (!isSelectedPackage(sbn.packageName)) return
 
         if (!AppPreferences.isEnabled(this)) {
             stopPlaybackWatcher()
@@ -130,8 +142,12 @@ class WhatIsPlaying : NotificationListenerService() {
         val rawArtist = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
 
         if (rawTitle.isNullOrBlank() || rawArtist.isNullOrBlank()) {
-            forgetTrack()
-            clearDiscordStatus()
+            // Other selected players may keep a silent/persistent notification
+            // around. Only clear the status if it belongs to this app.
+            if (lastPackage.isEmpty() || lastPackage == sbn.packageName) {
+                forgetTrack()
+                clearDiscordStatus()
+            }
             return
         }
 
@@ -161,7 +177,7 @@ class WhatIsPlaying : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        if (sbn != null && sbn.packageName in MUSIC_PACKAGES) {
+        if (sbn != null && isSelectedPackage(sbn.packageName) && sbn.packageName == lastPackage) {
             Log.d(TAG, "Music notification removed")
             stopPlaybackWatcher()
             forgetTrack()
@@ -332,6 +348,9 @@ class WhatIsPlaying : NotificationListenerService() {
     private fun stopPlaybackWatcher() {
         handler.removeCallbacks(playbackWatcher)
     }
+
+    private fun isSelectedPackage(packageName: String): Boolean =
+        AppPreferences.isPackageSelected(this, packageName)
 
     private fun refreshFromActiveNotifications() {
         if (!AppPreferences.isEnabled(this)) return

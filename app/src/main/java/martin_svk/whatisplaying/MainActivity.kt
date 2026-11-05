@@ -7,7 +7,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,16 +17,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -37,18 +45,24 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import martin_svk.whatisplaying.ui.theme.WhatIsPlayingTheme
 import kotlin.concurrent.thread
 
@@ -107,6 +121,33 @@ private fun SettingsScreen(
     var savedToken by rememberSaveable { mutableStateOf(AppPreferences.getToken(context)) }
     var tokenVisible by rememberSaveable { mutableStateOf(false) }
 
+    var players by remember { mutableStateOf<List<MusicApp>>(emptyList()) }
+    var allApps by remember { mutableStateOf<List<MusicApp>>(emptyList()) }
+    var appsLoaded by remember { mutableStateOf(false) }
+    var selectedPackages by remember {
+        mutableStateOf(AppPreferences.getSelectedPackages(context))
+    }
+    var showAllApps by rememberSaveable { mutableStateOf(false) }
+
+    fun saveSelection(newSelection: Set<String>) {
+        selectedPackages = newSelection
+        AppPreferences.setSelectedPackages(context, newSelection)
+    }
+
+    LaunchedEffect(Unit) {
+        val (detected, installed) = withContext(Dispatchers.IO) {
+            MusicAppScanner.detectPlayers(context) to MusicAppScanner.allLaunchableApps(context)
+        }
+        players = detected
+        allApps = installed
+
+        // First run: watch every detected player by default.
+        if (!AppPreferences.hasExplicitPackageSelection(context) && detected.isNotEmpty()) {
+            saveSelection(detected.map { it.packageName }.toSet())
+        }
+        appsLoaded = true
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -146,6 +187,26 @@ private fun SettingsScreen(
                 onRefreshNotificationAccess = onRefreshNotificationAccess
             )
 
+            PlayerAppsCard(
+                apps = players,
+                loaded = appsLoaded,
+                selected = selectedPackages,
+                onToggle = { packageName, checked ->
+                    saveSelection(
+                        if (checked) {
+                            selectedPackages + packageName
+                        } else {
+                            selectedPackages - packageName
+                        }
+                    )
+                },
+                onSelectAll = {
+                    saveSelection(selectedPackages + players.map { it.packageName })
+                },
+                onClear = { saveSelection(emptySet()) },
+                onBrowseAll = { showAllApps = true }
+            )
+
             TokenCard(
                 token = token,
                 tokenVisible = tokenVisible,
@@ -160,6 +221,23 @@ private fun SettingsScreen(
 
             InfoCard()
         }
+    }
+
+    if (showAllApps) {
+        AllAppsDialog(
+            apps = allApps,
+            selected = selectedPackages,
+            onToggle = { packageName, checked ->
+                saveSelection(
+                    if (checked) {
+                        selectedPackages + packageName
+                    } else {
+                        selectedPackages - packageName
+                    }
+                )
+            },
+            onDismiss = { showAllApps = false }
+        )
     }
 }
 
@@ -181,7 +259,7 @@ private fun IntroCard() {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Metrolist and Deezer notifications are turned into a Discord custom status.",
+                text = "Pick the music apps on your phone and share what you are listening to as a Discord custom status.",
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -296,6 +374,233 @@ private fun StatusCard(
 }
 
 @Composable
+private fun PlayerAppsCard(
+    apps: List<MusicApp>,
+    loaded: Boolean,
+    selected: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+    onBrowseAll: () -> Unit
+) {
+    Card(shape = RoundedCornerShape(20.dp)) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Music apps",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Only selected apps can update your Discord status.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "${selected.size} selected",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            HorizontalDivider()
+
+            when {
+                !loaded -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "Looking for installed players…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                apps.isEmpty() -> Text(
+                    text = "No music players were detected. Browse all installed apps to pick one manually.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                else -> Column {
+                    apps.forEach { app ->
+                        AppRow(
+                            app = app,
+                            checked = app.packageName in selected,
+                            onToggle = onToggle
+                        )
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = onSelectAll,
+                    enabled = apps.isNotEmpty()
+                ) {
+                    Text("Select all")
+                }
+                TextButton(
+                    onClick = onClear,
+                    enabled = selected.isNotEmpty()
+                ) {
+                    Text("Clear")
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onBrowseAll) {
+                    Text("Browse all")
+                }
+            }
+
+            if (selected.isEmpty()) {
+                Text(
+                    text = "No apps selected — your Discord status will not be updated.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AllAppsDialog(
+    apps: List<MusicApp>,
+    selected: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(apps, query) {
+        val search = query.trim()
+        if (search.isEmpty()) {
+            apps
+        } else {
+            apps.filter {
+                it.label.contains(search, ignoreCase = true) ||
+                    it.packageName.contains(search, ignoreCase = true)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("All installed apps") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search") },
+                    singleLine = true
+                )
+
+                if (filtered.isEmpty()) {
+                    Text(
+                        text = "No apps found.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                        items(filtered, key = { it.packageName }) { app ->
+                            AppRow(
+                                app = app,
+                                checked = app.packageName in selected,
+                                onToggle = onToggle
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AppRow(
+    app: MusicApp,
+    checked: Boolean,
+    onToggle: (String, Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle(app.packageName, !checked) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppIcon(packageName = app.packageName)
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = app.packageName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { onToggle(app.packageName, it) }
+        )
+    }
+}
+
+@Composable
+private fun AppIcon(packageName: String) {
+    val context = LocalContext.current
+    val icon by produceState<ImageBitmap?>(initialValue = null, packageName) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.packageManager
+                    .getApplicationIcon(packageName)
+                    .toImageBitmap(96)
+            }.getOrNull()
+        }
+    }
+
+    val bitmap = icon
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            modifier = Modifier.size(36.dp)
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(8.dp)
+                )
+        )
+    }
+}
+
+@Composable
 private fun TokenCard(
     token: String,
     tokenVisible: Boolean,
@@ -365,7 +670,7 @@ private fun InfoCard() {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            InfoLine("Works with Metrolist and Deezer notifications.")
+            InfoLine("Works with any music player you select — Metrolist, Deezer, Spotify, Apple Music, and more.")
             InfoLine("Removes play counts like \"1,3 tis. prehraní\" from artist names.")
             InfoLine("Adds a random cute kaomoji to every status.")
             InfoLine("Clears the status when playback is paused and restores it when you continue.")

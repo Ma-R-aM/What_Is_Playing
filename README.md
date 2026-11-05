@@ -5,7 +5,7 @@
 <h1 align="center">WhatIsPlaying</h1>
 
 <p align="center">
-  Turn your Metrolist or Deezer notification into a Discord custom status.
+  Turn what you are listening to into a Discord custom status.
 </p>
 
 <p align="center">
@@ -21,8 +21,9 @@
 </p>
 
 WhatIsPlaying is a small Android notification-listener app that watches media
-notifications from **Metrolist** and **Deezer**, extracts the current song title
-and artist, and pushes them to your **Discord custom status**.
+notifications from the music apps **you choose** — Metrolist, Deezer, Spotify,
+Apple Music, and others — extracts the current song title and artist, and pushes
+them to your **Discord custom status**.
 
 It also cleans up the play-count text that Metrolist sometimes adds to the
 artist name, adds a random cute kaomoji, and clears the Discord status when
@@ -32,8 +33,10 @@ playback is paused.
 
 ## Features
 
-- 🎵 Works with **Metrolist** (`com.metrolist.music`) and **Deezer**
-  (`deezer.android.app`).
+- 🎵 Works with **any music player you select**, including Metrolist, Deezer,
+  Spotify, and Apple Music.
+- 📱 **Music app picker** — detected players are listed with their icons, and
+  any other installed app can be added from a searchable "all apps" list.
 - 🧹 Removes play-count/views suffixes from artist names, for example
   `1,3 tis. prehraní`, `1.3K plays`, `12K views`, and similar variants.
 - ⏯️ Clears the Discord status when playback is paused and restores it when
@@ -49,7 +52,8 @@ playback is paused.
 ## How it works
 
 1. `WhatIsPlaying` runs as an Android `NotificationListenerService`.
-2. It listens for media notifications from Metrolist and Deezer.
+2. It listens for media notifications from the apps selected in the **Music
+   apps** card.
 3. `TrackInfoParser` cleans the raw title and artist strings.
 4. The current playback state is read from the Android media session.
 5. `DiscordApi` sends a `PATCH` request to Discord's user settings endpoint:
@@ -99,9 +103,17 @@ In the app, tap **Open notification access** and allow WhatIsPlaying to read
 notifications.
 
 This is required because the app needs to see the media notification posted by
-Metrolist/Deezer.
+your music player.
 
-### 4. Add your Discord token
+### 4. Choose your music apps
+
+In the **Music apps** card, tick the players that should update your Discord
+status. Detected players appear automatically with their icons.
+
+If your player is missing, tap **Browse all** and search for it in the full list
+of installed apps.
+
+### 5. Add your Discord token
 
 Paste your Discord user token into the **Discord token** field and tap
 **Save token**.
@@ -109,11 +121,11 @@ Paste your Discord user token into the **Discord token** field and tap
 The token is stored locally in the app's private SharedPreferences and is
 excluded from Android backups.
 
-### 5. Enable sending
+### 6. Enable sending
 
 Turn on **Send to Discord**.
 
-Play a song in Metrolist or Deezer. Your Discord custom status should update
+Play a song in one of the selected apps. Your Discord custom status should update
 automatically.
 
 ---
@@ -155,8 +167,8 @@ A lightweight watcher checks the playback state every 5 seconds, so this also
 works if the music app does not update its notification when paused.
 
 > Pause detection depends on the music app exposing a media session.
-> Metrolist and Deezer do this. If another app does not, pause detection may not
-> work reliably.
+> Most players do this. If an app does not, pause detection may not work
+> reliably.
 
 ---
 
@@ -164,15 +176,12 @@ works if the music app does not update its notification when paused.
 
 ### Add another music app
 
-Edit the package list in `WhatIsPlaying.kt`:
+No code changes needed: open the app, find the player in **Music apps**, and
+tick it. If it is not in the detected list, tap **Browse all** and pick it from
+the full list of installed apps.
 
-```kotlin
-private val MUSIC_PACKAGES = setOf(
-    "com.metrolist.music",
-    "deezer.android.app",
-    // add another package here
-)
-```
+The selection is stored in the app's settings and the notification listener
+picks it up immediately.
 
 ### Add more kaomojis
 
@@ -201,11 +210,12 @@ The status string is built in `buildStatus()` in `WhatIsPlaying.kt`:
 
 ```text
 app/src/main/java/martin_svk/whatisplaying/
-├── MainActivity.kt          # Compose settings screen
+├── MainActivity.kt          # Compose settings screen + music app picker
+├── MusicAppScanner.kt       # Finds installed music players and their icons
 ├── WhatIsPlaying.kt         # Notification listener + Discord status logic
 ├── TrackInfoParser.kt       # Title/artist cleaning and play-count regex
 ├── DiscordApi.kt            # Discord HTTP requests
-├── AppPreferences.kt        # Saved toggle + Discord token
+├── AppPreferences.kt        # Saved toggle, selected apps, Discord token
 └── ui/theme/                # Compose theme
 
 app/src/main/res/
@@ -247,6 +257,7 @@ Run Android lint:
 
 - Make sure notification access is granted.
 - Make sure **Send to Discord** is turned on.
+- Make sure the player is ticked in **Music apps**.
 - Make sure a valid Discord token has been saved.
 - Check Logcat with the tag `MusicApp`:
 
@@ -265,10 +276,17 @@ Add the exact wording to the regex in `TrackInfoParser.kt` and add a test case.
 The parser only removes a play-count phrase when it appears at the **end** of the
 artist string, so normal artist names containing numbers are left alone.
 
+### My music app is not in the list
+
+Tap **Browse all** in the **Music apps** card and search for it by name or
+package. Some players do not advertise a media-button receiver or media browser
+service, so they cannot be detected automatically, but they can still be
+selected manually.
+
 ### Status does not clear when paused
 
 The music app may not be exposing a media session, or the notification may not
-contain a media session token. Metrolist and Deezer are supported.
+contain a media session token. Most popular players expose one.
 
 ---
 
@@ -277,6 +295,9 @@ contain a media session token. Metrolist and Deezer are supported.
 - No analytics.
 - No third-party server.
 - The app talks directly to Discord's API.
+- The selected music apps are stored only on the device.
+- The app requests `QUERY_ALL_PACKAGES` solely to show the list of installed
+  apps in the picker. It does not read app data or send the list anywhere.
 - The Discord token is stored only on the device.
 - The token preference is excluded from Android backup and device transfer.
 
@@ -298,8 +319,9 @@ This app uses a **Discord user token** to update your own custom status.
 ## Credits
 
 - Original project idea and initial vibe-coded implementation: **Martin SVK**
-- Feature implementation, refactoring, parser tests, app icon, and README:
-  **DeepSeek V4.1 Flash Free** running in **OpenCode**
+- Feature implementation, refactoring, parser tests, music app picker, app icon,
+  and README: **DeepSeek V4.1 Flash Free** running in **OpenCode**
 - Built with Kotlin, Jetpack Compose, and Material 3
 
-Not affiliated with Discord, Metrolist, or Deezer.
+Not affiliated with Discord, Metrolist, Deezer, Spotify, Apple Music, or any
+other music player.
