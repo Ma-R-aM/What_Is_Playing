@@ -218,8 +218,6 @@ private fun SettingsScreen(
                     Toast.makeText(context, "Discord token saved", Toast.LENGTH_SHORT).show()
                 }
             )
-
-            InfoCard()
         }
     }
 
@@ -650,46 +648,5 @@ private fun TokenCard(
                 Text("Save token")
             }
         }
-    }
-}
-
-@Composable
-private fun InfoCard() {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "What it does",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            InfoLine("Works with any music player you select — Metrolist, Deezer, Spotify, Apple Music, and more.")
-            InfoLine("Removes play counts like \"1,3 tis. prehraní\" from artist names.")
-            InfoLine("Adds a random cute kaomoji to every status.")
-            InfoLine("Clears the status when playback is paused and restores it when you continue.")
-        }
-    }
-}
-
-@Composable
-private fun InfoLine(text: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "•",
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
