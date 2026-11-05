@@ -18,6 +18,7 @@
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white">
   <img alt="minSdk" src="https://img.shields.io/badge/minSdk-24-blue">
+  <a href="https://github.com/Ma-R-aM/What_Is_Playing/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Ma-R-aM/What_Is_Playing"></a>
 </p>
 
 WhatIsPlaying is a small Android notification-listener app that watches media
@@ -76,6 +77,10 @@ playback is paused.
 ---
 
 ## Getting started
+
+> **Prebuilt APK:** download the latest `WhatIsPlaying-*.apk` from the
+> [Releases page](https://github.com/Ma-R-aM/What_Is_Playing/releases/latest)
+> and install it. You may need to allow installation from unknown sources.
 
 ### 1. Build the app
 
