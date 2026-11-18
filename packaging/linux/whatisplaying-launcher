@@ -1,0 +1,10 @@
+#!/bin/sh
+# Locate the installation prefix from this launcher, then start the app.
+set -eu
+
+self=$(readlink -f -- "$0")
+prefix=$(dirname "$(dirname "$self")")
+
+PYTHONPATH="$prefix/lib/whatisplaying${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+exec python3 -m whatisplaying "$@"

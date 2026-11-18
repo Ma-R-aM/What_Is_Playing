@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=WhatIsPlaying
+GenericName=Discord music status
+Comment=Share what you are listening to as a Discord custom status
+Exec=whatisplaying
+Icon=whatisplaying
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=discord;music;status;mpris;now-playing;
+StartupNotify=true
+StartupWMClass=whatisplaying

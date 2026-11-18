@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="0.55" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+  <circle cx="16" cy="12" r="32" fill="#FFFFFF" opacity="0.10"/>
+  <circle cx="96" cy="98" r="38" fill="#FFFFFF" opacity="0.08"/>
+  <circle cx="54" cy="54" r="43" fill="#FFFFFF" opacity="0.045"/>
+  <g transform="translate(7.56 7.56) scale(0.86)">
+    <!-- ears -->
+    <path fill="#FFF7FB" d="M31,35 L25,15 L47,27 Z"/>
+    <path fill="#FFF7FB" d="M77,35 L83,15 L61,27 Z"/>
+    <path fill="#F9A8D4" d="M33,31 L29,21 L41,28 Z"/>
+    <path fill="#F9A8D4" d="M75,31 L79,21 L67,28 Z"/>
+
+    <!-- head -->
+    <path fill="#FFF7FB" d="M54,24 C38,24 28,36 28,52 C28,70 39,82 54,82 C69,82 80,70 80,52 C80,36 70,24 54,24 Z"/>
+
+    <!-- blush -->
+    <path fill="#F9A8D4" opacity="0.75" d="M32,63 C32,61.122 34.686,59.6 38,59.6 C41.314,59.6 44,61.122 44,63 C44,64.878 41.314,66.4 38,66.4 C34.686,66.4 32,64.878 32,63 Z"/>
+    <path fill="#F9A8D4" opacity="0.75" d="M64,63 C64,61.122 66.686,59.6 70,59.6 C73.314,59.6 76,61.122 76,63 C76,64.878 73.314,66.4 70,66.4 C66.686,66.4 64,64.878 64,63 Z"/>
+
+    <!-- eyes -->
+    <path fill="#1F2937" d="M41.4,52 C41.4,49.625 43.012,47.7 45,47.7 C46.988,47.7 48.6,49.625 48.6,52 C48.6,54.375 46.988,56.3 45,56.3 C43.012,56.3 41.4,54.375 41.4,52 Z"/>
+    <path fill="#1F2937" d="M59.4,52 C59.4,49.625 61.012,47.7 63,47.7 C64.988,47.7 66.6,49.625 66.6,52 C66.6,54.375 64.988,56.3 63,56.3 C61.012,56.3 59.4,54.375 59.4,52 Z"/>
+    <path fill="#FFFFFF" d="M45.2,50.4 C45.2,49.737 45.737,49.2 46.4,49.2 C47.063,49.2 47.6,49.737 47.6,50.4 C47.6,51.063 47.063,51.6 46.4,51.6 C45.737,51.6 45.2,51.063 45.2,50.4 Z"/>
+    <path fill="#FFFFFF" d="M63.2,50.4 C63.2,49.737 63.737,49.2 64.4,49.2 C65.063,49.2 65.6,49.737 65.6,50.4 C65.6,51.063 65.063,51.6 64.4,51.6 C63.737,51.6 63.2,51.063 63.2,50.4 Z"/>
+
+    <!-- nose -->
+    <path fill="#F472B6" d="M51,58 L57,58 L54,62 Z"/>
+
+    <!-- mouth -->
+    <path fill="none" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round" d="M54,62 C54,66 50.5,67.5 48,65.5"/>
+    <path fill="none" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round" d="M54,62 C54,66 57.5,67.5 60,65.5"/>
+
+    <!-- whiskers -->
+    <path fill="none" stroke="#1F2937" stroke-width="1.5" stroke-linecap="round" opacity="0.8" d="M24,54 L36,55 M24,61 L36,59.5"/>
+    <path fill="none" stroke="#1F2937" stroke-width="1.5" stroke-linecap="round" opacity="0.8" d="M84,54 L72,55 M84,61 L72,59.5"/>
+
+    <!-- music note -->
+    <g transform="rotate(12 78 34)">
+      <path fill="#FDE68A" d="M75,29 L83,27 L83,39 L81,39 L81,30.5 L77,31.5 L77,42 L75,42 Z"/>
+      <path fill="#FDE68A" d="M70.8,42 C70.8,40.564 72.233,39.4 74,39.4 C75.767,39.4 77.2,40.564 77.2,42 C77.2,43.436 75.767,44.6 74,44.6 C72.233,44.6 70.8,43.436 70.8,42 Z"/>
+      <path fill="#FDE68A" d="M76.8,39 C76.8,37.564 78.233,36.4 80,36.4 C81.767,36.4 83.2,37.564 83.2,39 C83.2,40.436 81.767,41.6 80,41.6 C78.233,41.6 76.8,40.436 76.8,39 Z"/>
+    </g>
+
+    <!-- sparkle -->
+    <path fill="#FDE68A" opacity="0.95" d="M24,31 L25.4,35.6 L30,37 L25.4,38.4 L24,43 L22.6,38.4 L18,37 L22.6,35.6 Z"/>
+  </g>
+</svg>

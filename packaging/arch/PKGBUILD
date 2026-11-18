@@ -1,0 +1,27 @@
+# Maintainer: Martin SVK
+pkgname=whatisplaying
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Share the track you are listening to as a Discord custom status'
+arch=('any')
+url='https://github.com/Ma-R-aM/What_Is_Playing'
+license=('custom')
+depends=('python' 'pyside6' 'qt6-svg')
+optdepends=('qt6-wayland: native Wayland support')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+# This is a local source build. The tarball is created by
+# packaging/arch/build-package.sh. Replace SKIP with a real checksum before
+# publishing this PKGBUILD to the AUR.
+
+package() {
+    install -d "$pkgdir/usr/lib/$pkgname"
+    cp -a "$srcdir/$pkgname-$pkgver/whatisplaying" "$pkgdir/usr/lib/$pkgname/"
+    install -Dm755 "$srcdir/$pkgname-$pkgver/whatisplaying-launcher" \
+        "$pkgdir/usr/bin/$pkgname"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/whatisplaying.desktop" \
+        "$pkgdir/usr/share/applications/$pkgname.desktop"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/whatisplaying.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
+}
