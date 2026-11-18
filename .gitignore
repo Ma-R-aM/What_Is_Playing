@@ -11,6 +11,8 @@
 local.properties
 __pycache__/
 *.py[cod]
+.venv/
+venv/
 packaging/arch/pkg/
 packaging/arch/src/
 packaging/arch/*.tar.gz
