@@ -17,6 +17,12 @@ if ! python3 -c 'import PySide6, PySide6.QtSvg' >/dev/null 2>&1; then
     echo "On Arch Linux: sudo pacman -S pyside6 qt6-svg" >&2
     exit 1
 fi
+if ! python3 -c 'import dbus' >/dev/null 2>&1; then
+    echo "python-dbus is required to read track metadata from MPRIS players." >&2
+    echo "On Arch Linux: sudo pacman -S python-dbus" >&2
+    echo "On Debian/Ubuntu: sudo apt install python3-dbus" >&2
+    exit 1
+fi
 
 echo "Installing WhatIsPlaying into $prefix"
 install -d "$bin_dir" "$lib_dir" "$data_dir/applications" \

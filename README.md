@@ -143,15 +143,16 @@ clear the Discord status when playback is paused.
 
 - Python **3.10+**
 - **PySide6** (Qt 6) with the **Qt 6 SVG** module
+- **python-dbus** (`python3-dbus` on Debian/Ubuntu) to read MPRIS metadata
 - A D-Bus session bus
 - A music player that exposes **MPRIS**
 - A Discord account and a Discord **user token**
 - Internet connection
 
-On Arch Linux the only package you need is:
+On Arch Linux install:
 
 ```bash
-sudo pacman -S --needed python pyside6 qt6-svg
+sudo pacman -S --needed python pyside6 qt6-svg python-dbus
 ```
 
 For a native Wayland session, also install `qt6-wayland` if it is not already
@@ -293,8 +294,8 @@ Or build and install in one step:
 ./packaging/arch/build-package.sh --install
 ```
 
-The package depends on `python` and `pyside6`, installs the desktop entry and
-icon, and puts the launcher in `/usr/bin/whatisplaying`.
+The package depends on `python`, `pyside6` and `python-dbus`, installs the
+desktop entry and icon, and puts the launcher in `/usr/bin/whatisplaying`.
 
 Remove it with:
 
@@ -606,7 +607,7 @@ desktop/whatisplaying/       # Linux + Windows desktop app (Qt 6 / PySide6)
 ├── app.py                   # Entry point, CLI, single-instance handling
 ├── controller.py            # Media session → parser → Discord coordination
 ├── media.py                 # Platform-neutral snapshot + backend selection
-├── mpris.py                 # Linux: MPRIS player discovery over D-Bus
+├── mpris.py                 # Linux: MPRIS players + metadata over D-Bus
 ├── smtc.py                  # Windows: SMTC media sessions (PyWinRT)
 ├── parser.py                # Title/artist cleaning, status builder
 ├── discord.py               # Discord HTTP client
@@ -706,6 +707,10 @@ On Windows:
   ```bash
   tail -f ~/.local/state/whatisplaying/whatisplaying.log
   ```
+
+  If the log mentions that `python-dbus` is not installed, the player can be
+  detected but its title and artist cannot be read, so the status is never sent.
+  Install `python-dbus` (`python3-dbus` on Debian/Ubuntu) and restart the app.
 
 - On Windows, check the in-app **Activity** log or:
 
